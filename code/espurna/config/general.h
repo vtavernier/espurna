@@ -1099,6 +1099,8 @@
 #define MQTT_TOPIC_NOTIFY_TEMP_RANGE_MIN "notify_temp_range_min"
 #define MQTT_TOPIC_NOTIFY_TEMP_RANGE_MAX "notify_temp_range_max"
 
+// Hyperion module
+#define MQTT_TOPIC_HYPERION_LISTEN  "hyperion_listen"
 
 #ifndef MQTT_STATUS_ONLINE
 #define MQTT_STATUS_ONLINE          "1"         // Value for the device ON message
@@ -1866,4 +1868,25 @@
 
 #ifndef TUYA_SERIAL
 #define TUYA_SERIAL                 Serial
+#endif
+
+//--------------------------------------------------------------------------------
+// Hyperion Ambilight solution
+// See http://hyperion-project.org/
+//--------------------------------------------------------------------------------
+
+#ifndef HYPERION_SUPPORT
+#define HYPERION_SUPPORT            1
+#endif
+
+#ifndef HYPERION_PORT
+#define HYPERION_PORT               19446
+#endif
+
+#ifndef HYPERION_LIGHT_CHANNELS
+#define HYPERION_LIGHT_CHANNELS     3
+#endif
+
+#ifndef HYPERION_LISTEN
+#define HYPERION_LISTEN             1
 #endif

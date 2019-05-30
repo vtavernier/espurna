@@ -52,6 +52,9 @@ bool _light_has_color = false;
 bool _light_use_white = false;
 bool _light_use_cct = false;
 bool _light_use_gamma = false;
+#if HYPERION_SUPPORT
+bool _light_hyperion_update = false;
+#endif
 
 bool _light_provider_update = false;
 
@@ -843,7 +846,22 @@ void _lightComms(const unsigned char mask) {
 
 }
 
+#if HYPERION_SUPPORT
+void lightHyperionUpdate(bool hyperionUpdate) {
+    _light_hyperion_update = hyperionUpdate;
+}
+#endif
+
 void lightUpdate(bool save, bool forward, bool group_forward) {
+#if HYPERION_SUPPORT
+    if (_light_hyperion_update) {
+        _light_hyperion_update = false;
+
+        for (unsigned char i=0; i<_light_channel.size(); ++i) {
+            _light_channel[i].value = _light_channel[i].inputValue;
+        }
+    } else {
+#endif
 
     // Calculate values based on inputs and brightness
     _light_brightness_func();
@@ -876,6 +894,9 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
         if (save) _light_save_ticker.once(LIGHT_SAVE_DELAY, _lightSaveSettings);
     #endif
 
+#if HYPERION_SUPPORT
+    }
+#endif
 };
 
 void lightUpdate(bool save, bool forward) {

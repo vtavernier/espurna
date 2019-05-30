@@ -51,6 +51,7 @@
     #define DEBUG_TELNET_SUPPORT    0
     #define DEBUG_WEB_SUPPORT       0
     #define HOMEASSISTANT_SUPPORT   0
+    #define HYPERION_SUPPORT        0
     #define I2C_SUPPORT             0
     #define MQTT_SUPPORT            0
     #define NTP_SUPPORT             0
