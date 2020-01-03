@@ -117,8 +117,10 @@ void _hyperionLoop() {
 
         // Let Hyperion manage colors if we have all channels
         lightHyperionUpdate(HYPERION_LIGHT_CHANNELS == LIGHT_CHANNELS);
+
         // Do not forward Hyperion colors
-        lightUpdate(true, false, false);
+        // Do not save values to EEPROM
+        lightUpdate(false, false, false);
     }
 }
 
