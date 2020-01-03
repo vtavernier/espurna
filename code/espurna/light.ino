@@ -853,14 +853,14 @@ void lightHyperionUpdate(bool hyperionUpdate) {
 #endif
 
 void lightUpdate(bool save, bool forward, bool group_forward) {
-#if HYPERION_SUPPORT
-    if (_light_hyperion_update) {
-        _light_hyperion_update = false;
 
-        for (unsigned char i=0; i<_light_channel.size(); ++i) {
-            _light_channel[i].value = _light_channel[i].inputValue;
-        }
-    } else {
+#if HYPERION_SUPPORT
+    if (_light_hyperion_update)
+    {
+        _light_hyperion_update = false;
+        _lightApplyBrightness();
+    }
+    else
 #endif
 
     // Calculate values based on inputs and brightness
@@ -894,10 +894,7 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
         if (save) _light_save_ticker.once(LIGHT_SAVE_DELAY, _lightSaveSettings);
     #endif
 
-#if HYPERION_SUPPORT
-    }
-#endif
-};
+}
 
 void lightUpdate(bool save, bool forward) {
     lightUpdate(save, forward, true);

@@ -1883,8 +1883,8 @@
 #define HYPERION_PORT               19446
 #endif
 
-#ifndef HYPERION_LIGHT_CHANNELS
-#define HYPERION_LIGHT_CHANNELS     3
+#ifndef HYPERION_LIGHT_COUNT
+#define HYPERION_LIGHT_COUNT        1
 #endif
 
 #ifndef HYPERION_LISTEN

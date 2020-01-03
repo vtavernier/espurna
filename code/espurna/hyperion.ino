@@ -85,17 +85,22 @@ void _hyperionInitCommands() {
 
 void _hyperionLoop() {
     int packetSize = _hyperion_udp.parsePacket();
-    if (_hyperion_listen &&
-        packetSize > 0 && (packetSize % HYPERION_LIGHT_CHANNELS) == 0) {
+    if (_hyperion_listen && packetSize > 0) {
+        int componentsPerLed = packetSize / HYPERION_LIGHT_COUNT;
+
+        // Too much data for the LEDs we have
+        if (componentsPerLed > LIGHT_CHANNELS)
+            return;
+
         // An Hyperion packet is 8-bit RGB data in the order
         // of the configured LEDs. We can parse that now.
         uint8_t packetBuffer[packetSize];
         _hyperion_udp.read(packetBuffer, packetSize);
 
         unsigned char led = 0;
-        for (int i = 0; i < packetSize; i += HYPERION_LIGHT_CHANNELS, led += LIGHT_CHANNELS) {
+        for (int i = 0; i < packetSize; i += componentsPerLed, led += LIGHT_CHANNELS) {
             // We assume that the packet contains HYPERION_LIGHT_CHANNELS channels per light
-            for (int j = 0; j < HYPERION_LIGHT_CHANNELS; ++j) {
+            for (int j = 0; j < componentsPerLed; ++j) {
                 lightChannel(led + j, packetBuffer[i + j]);
 
                 // Switch on channel
@@ -103,7 +108,7 @@ void _hyperionLoop() {
             }
 
             // Extra channels should not be enabled
-            for (int j = HYPERION_LIGHT_CHANNELS; j < LIGHT_CHANNELS; ++j) {
+            for (int j = componentsPerLed; j < LIGHT_CHANNELS; ++j) {
                 // Clear channel value
                 lightChannel(led + j, 0);
             }
@@ -116,7 +121,7 @@ void _hyperionLoop() {
         lightState(true);
 
         // Let Hyperion manage colors if we have all channels
-        lightHyperionUpdate(HYPERION_LIGHT_CHANNELS == LIGHT_CHANNELS);
+        lightHyperionUpdate(componentsPerLed == LIGHT_CHANNELS);
 
         // Do not forward Hyperion colors
         // Do not save values to EEPROM
