@@ -184,6 +184,7 @@
 #define LIGHT_PROVIDER_MY92XX       1       // works with MY9291 and MY9231
 #define LIGHT_PROVIDER_DIMMER       2
 #define LIGHT_PROVIDER_TUYA         3
+#define LIGHT_PROVIDER_PCA9685      4
 
 // -----------------------------------------------------------------------------
 // SCHEDULER

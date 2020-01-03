@@ -84,6 +84,12 @@ my92xx * _my92xx;
 ARRAYINIT(unsigned char, _light_channel_map, MY92XX_MAPPING);
 #endif
 
+#if LIGHT_PROVIDER == LIGHT_PROVIDER_PCA9685
+#include "libs/pca9685.h"
+PCA9685Pwm _pca_pwm;
+ARRAYINIT(unsigned char, _pca_channel_map, PCA9685_MAPPING);
+#endif
+
 // UI hint about channel distribution
 const char _light_channel_desc[5][5] PROGMEM = {
     {'W',   0,   0,   0,   0},
@@ -141,13 +147,13 @@ void _setCCTInputValue(unsigned char warm, unsigned char cold) {
     _setInputValue(1, constrain(cold, Light::VALUE_MIN, Light::VALUE_MAX));
 }
 
-void _lightApplyBrightness(size_t channels = lightChannels()) {
+void _lightApplyBrightness(size_t channels = _light_channel.size()) {
 
     double brightness = static_cast<double>(_light_brightness) / static_cast<double>(Light::BRIGHTNESS_MAX);
 
-    channels = std::min(channels, lightChannels());
+    channels = std::min(channels, _light_channel.size());
 
-    for (unsigned char i=0; i < lightChannels(); i++) {
+    for (unsigned char i=0; i < _light_channel.size(); i++) {
         if (i >= channels) brightness = 1;
         _setValue(i, _light_channel[i].inputValue * brightness);
     }
@@ -203,16 +209,16 @@ void _lightApplyBrightnessColor() {
 
     // For the rest of channels, don't apply brightness, it is already in the inputValue
     // i should be 4 when RGBW and 5 when RGBWW
-    for (unsigned char i=channelSize; i < _light_channel.size(); i++) {
+    for (unsigned char i=channelSize; i < lightChannels(); i++) {
         _setValue(i, _light_channel[i].inputValue);
     }
 
 }
 
 String lightDesc(unsigned char id) {
-    if (id >= _light_channel.size()) return FPSTR(pstr_unknown);
+    if (id >= lightChannels()) return FPSTR(pstr_unknown);
 
-    const char tag = pgm_read_byte(&_light_channel_desc[_light_channel.size() - 1][id]);
+    const char tag = pgm_read_byte(&_light_channel_desc[lightChannels() - 1][id]);
     switch (tag) {
         case 'W': return F("WARM WHITE");
         case 'C': return F("COLD WHITE");
@@ -249,7 +255,7 @@ void _fromRGB(const char * rgb) {
         _fromLong(strtoul(rgb + 1, nullptr, 16), strlen(rgb + 1) > 7);
     // With comma separated string, assume decimal values
     } else {
-        const auto channels = _light_channel.size();
+        const auto channels = lightChannels();
         unsigned char count = 0;
 
         char buf[16] = {0};
@@ -577,6 +583,15 @@ void _lightProviderUpdate(unsigned long steps) {
 
     #endif
 
+    #if LIGHT_PROVIDER == LIGHT_PROVIDER_PCA9685
+
+        for (unsigned char i=0; i<_light_channel.size(); ++i) {
+            _pca_pwm.setChannel(_light_channel[i].pin, _toPWM(i));
+        }
+        _pca_pwm.update();
+
+    #endif
+
     // This is not the final value, update again
     if (steps) _light_transition_ticker.once_ms(LIGHT_TRANSITION_STEP, _lightProviderScheduleUpdate, steps);
 
@@ -631,7 +646,7 @@ void _lightRestoreRtcmem() {
 }
 
 void _lightSaveSettings() {
-    for (unsigned int i=0; i < _light_channel.size(); i++) {
+    for (unsigned int i=0; i < lightChannels(); i++) {
         setSetting("ch", i, _light_channel[i].inputValue);
     }
     setSetting("brightness", _light_brightness);
@@ -640,7 +655,7 @@ void _lightSaveSettings() {
 }
 
 void _lightRestoreSettings() {
-    for (unsigned int i=0; i < _light_channel.size(); i++) {
+    for (unsigned int i=0; i < lightChannels(); i++) {
         _light_channel[i].inputValue = getSetting("ch", i, (i == 0) ? Light::VALUE_MAX : 0).toInt();
     }
     _light_brightness = getSetting("brightness", Light::BRIGHTNESS_MAX).toInt();
@@ -735,7 +750,7 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
         // Channel
         if (t.startsWith(MQTT_TOPIC_CHANNEL)) {
             unsigned int channelID = t.substring(strlen(MQTT_TOPIC_CHANNEL)+1).toInt();
-            if (channelID >= _light_channel.size()) {
+            if (channelID >= lightChannels()) {
                 DEBUG_MSG_P(PSTR("[LIGHT] Wrong channelID (%d)\n"), channelID);
                 return;
             }
@@ -776,7 +791,7 @@ void lightMQTT() {
     }
 
     // Channels
-    for (unsigned int i=0; i < _light_channel.size(); i++) {
+    for (unsigned int i=0; i < lightChannels(); i++) {
         itoa(_light_channel[i].target, buffer, 10);
         mqttSend(MQTT_TOPIC_CHANNEL, i, buffer);
     }
@@ -803,7 +818,7 @@ void lightMQTTGroup() {
 #if BROKER_SUPPORT
 
 void lightBroker() {
-    for (unsigned int id = 0; id < _light_channel.size(); ++id) {
+    for (unsigned int id = 0; id < lightChannels(); ++id) {
         StatusBroker::Publish(MQTT_TOPIC_CHANNEL, id, _light_channel[id].value);
     }
 }
@@ -815,7 +830,7 @@ void lightBroker() {
 // -----------------------------------------------------------------------------
 
 size_t lightChannels() {
-    return _light_channel.size();
+    return LIGHT_CHANNELS;
 }
 
 bool lightHasColor() {
@@ -856,10 +871,7 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
 
 #if HYPERION_SUPPORT
     if (_light_hyperion_update)
-    {
-        _light_hyperion_update = false;
         _lightApplyBrightness();
-    }
     else
 #endif
 
@@ -875,6 +887,26 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
         _light_channel[i].target = _light_state && _light_channel[i].state ? _light_channel[i].value : 0;
         //DEBUG_MSG_P("[LIGHT] Channel #%u target value: %u\n", i, _light_channel[i].target);
     }
+
+#if LIGHT_PROVIDER == LIGHT_PROVIDER_PCA9685
+
+#if HYPERION_SUPPORT
+    if (!_light_hyperion_update)
+#endif
+        for (unsigned int i = 1; i<PCA9685_COUNT; ++i)
+            for (unsigned int j = 0; j<LIGHT_CHANNELS; ++j)
+            {
+                const auto &src = _light_channel[j];
+                auto &dst = _light_channel[i * LIGHT_CHANNELS + j];
+
+                dst.state = src.state;
+                dst.inputValue = src.inputValue;
+                dst.value = src.value;
+                dst.target = src.target;
+                dst.current = src.current;
+            }
+
+#endif
 
     // Channel transition will be handled by the provider function
     // User can configure total transition time, step time is a fixed value
@@ -893,6 +925,10 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
         // Delay saving to EEPROM 5 seconds to avoid wearing it out unnecessarily
         if (save) _light_save_ticker.once(LIGHT_SAVE_DELAY, _lightSaveSettings);
     #endif
+
+#if HYPERION_SUPPORT
+    _light_hyperion_update = false;
+#endif
 
 }
 
@@ -1035,7 +1071,7 @@ void _lightWebSocketStatus(JsonObject& root) {
         root["useCCT"] = _light_use_cct;
     }
     JsonArray& channels = root.createNestedArray("channels");
-    for (unsigned char id=0; id < _light_channel.size(); id++) {
+    for (unsigned char id=0; id < lightChannels(); id++) {
         channels.add(lightChannel(id));
     }
     root["brightness"] = lightBrightness();
@@ -1147,7 +1183,7 @@ void _lightAPISetup() {
 
     }
 
-    for (unsigned int id=0; id<_light_channel.size(); id++) {
+    for (unsigned int id=0; id<lightChannels(); id++) {
 
         char key[15];
         snprintf_P(key, sizeof(key), PSTR("%s/%d"), MQTT_TOPIC_CHANNEL, id);
@@ -1279,13 +1315,13 @@ const unsigned long _light_iofunc[16] PROGMEM = {
 void _lightConfigure() {
 
     _light_has_color = getSetting("useColor", LIGHT_USE_COLOR).toInt() == 1;
-    if (_light_has_color && (_light_channel.size() < 3)) {
+    if (_light_has_color && (lightChannels() < 3)) {
         _light_has_color = false;
         setSetting("useColor", _light_has_color);
     }
 
     _light_use_white = getSetting("useWhite", LIGHT_USE_WHITE).toInt() == 1;
-    if (_light_use_white && (_light_channel.size() < 4) && (_light_channel.size() != 2)) {
+    if (_light_use_white && (lightChannels() < 4) && (lightChannels() != 2)) {
         _light_use_white = false;
         setSetting("useWhite", _light_use_white);
     }
@@ -1301,7 +1337,7 @@ void _lightConfigure() {
     }
 
     _light_use_cct = getSetting("useCCT", LIGHT_USE_CCT).toInt() == 1;
-    if (_light_use_cct && (((_light_channel.size() < 5) && (_light_channel.size() != 2)) || !_light_use_white)) {
+    if (_light_use_cct && (((lightChannels() < 5) && (lightChannels() != 2)) || !_light_use_white)) {
         _light_use_cct = false;
         setSetting("useCCT", _light_use_cct);
     }
@@ -1390,8 +1426,24 @@ void lightSetup() {
         tuyaSetupLight();
     #endif
 
+    #if LIGHT_PROVIDER == LIGHT_PROVIDER_PCA9685
+
+        _light_channel.reserve(LIGHT_CHANNELS * PCA9685_COUNT);
+
+        _pca_pwm.begin();
+
+        for (unsigned char j=0; j<PCA9685_COUNT; j++) {
+            for (unsigned char i=0; i<LIGHT_CHANNELS; i++) {
+                _light_channel.push_back((channel_t) {_pca_channel_map[j * LIGHT_CHANNELS + i], false, true, 0, 0, 0});
+            }
+        }
+
+        _pca_pwm.update();
+
+    #endif
+
     DEBUG_MSG_P(PSTR("[LIGHT] LIGHT_PROVIDER = %d\n"), LIGHT_PROVIDER);
-    DEBUG_MSG_P(PSTR("[LIGHT] Number of channels: %d\n"), _light_channel.size());
+    DEBUG_MSG_P(PSTR("[LIGHT] Number of channels: %d\n"), lightChannels());
 
     _lightConfigure();
     if (rtcmemStatus()) {
