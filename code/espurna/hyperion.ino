@@ -10,6 +10,13 @@ HYPERION MODULE
 
 WiFiUDP _hyperion_udp;
 
+enum hyperion_listen_state_t {
+    HL_INACTIVE,
+    HL_ACTIVE,
+} _hyperion_state = HL_INACTIVE;
+unsigned long long _hyperion_state_changed = 0;
+bool _hyperion_saved_light_state;
+
 bool _hyperion_listen;
 uint16_t _hyperion_port;
 
@@ -77,6 +84,7 @@ void _hyperionInitCommands() {
         }
 
         DEBUG_MSG_P(PSTR("Listen: %s\n"), _hyperion_listen ? "true" : "false");
+        DEBUG_MSG_P(PSTR("State: %s\n"), _hyperion_state == HL_INACTIVE ? "inactive" : "active");
 
         terminalOK();
     });
@@ -85,12 +93,17 @@ void _hyperionInitCommands() {
 
 void _hyperionLoop() {
     int packetSize = _hyperion_udp.parsePacket();
-    if (_hyperion_listen && packetSize > 0) {
-        int componentsPerLed = packetSize / HYPERION_LIGHT_COUNT;
+    int componentsPerLed = packetSize / HYPERION_LIGHT_COUNT;
 
-        // Too much data for the LEDs we have
-        if (componentsPerLed > LIGHT_CHANNELS)
-            return;
+    bool updated = false;
+
+    if (_hyperion_listen && packetSize > 0 && componentsPerLed <= LIGHT_CHANNELS) {
+        // If we were in an inactive state, change it now
+        if (_hyperion_state == HL_INACTIVE) {
+            _hyperion_state = HL_ACTIVE;
+            _hyperion_saved_light_state = lightState();
+            _lightSaveRtcmem();
+        }
 
         // An Hyperion packet is 8-bit RGB data in the order
         // of the configured LEDs. We can parse that now.
@@ -125,6 +138,18 @@ void _hyperionLoop() {
 
         // Do not forward Hyperion colors
         // Do not save values to EEPROM
+        lightUpdate(false, false, false);
+
+        // Update current state
+        _hyperion_state_changed = millis();
+    }
+
+    if (_hyperion_state == HL_ACTIVE &&
+            millis() - _hyperion_state_changed > 10000) {
+        // We're in the active state but no data came through recently (10s)
+        _hyperion_state = HL_INACTIVE;
+        _lightRestoreRtcmem();
+        lightState(_hyperion_saved_light_state);
         lightUpdate(false, false, false);
     }
 }
